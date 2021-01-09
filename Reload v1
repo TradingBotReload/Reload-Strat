@@ -1,0 +1,136 @@
+strategy(title="Reload Strategy", shorttitle="Reload", overlay = false)
+
+SC = input(close, "Source", input.source)
+
+// Fast Trail //
+AP1 = input(5, "Fast ATR period", input.integer)  // ATR Period
+AF1 = input(0.5, "Fast ATR multiplier", input.float)  // ATR Factor
+SL1 = AF1 * atr(AP1)  // Stop Loss
+Trail1 = 0.0
+Trail1 := iff(SC > nz(Trail1[1], 0) and SC[1] > nz(Trail1[1], 0), max(nz(Trail1[1], 0), SC - SL1), iff(SC < nz(Trail1[1], 0) and SC[1] < nz(Trail1[1], 0), min(nz(Trail1[1], 0), SC + SL1), iff(SC > nz(Trail1[1], 0), SC - SL1, SC + SL1)))
+
+// Slow Trail //
+AP2 = input(10, "Slow ATR period", input.integer)  // ATR Period
+AF2 = input(2, "Slow ATR multiplier", input.float)  // ATR Factor
+SL2 = AF2 * atr(AP2)  // Stop Loss
+Trail2 = 0.0
+Trail2 := iff(SC > nz(Trail2[1], 0) and SC[1] > nz(Trail2[1], 0), max(nz(Trail2[1], 0), SC - SL2), iff(SC < nz(Trail2[1], 0) and SC[1] < nz(Trail2[1], 0), min(nz(Trail2[1], 0), SC + SL2), iff(SC > nz(Trail2[1], 0), SC - SL2, SC + SL2)))
+
+// Bar color for trade signal //
+Green = Trail1 > Trail2 and close > Trail2 and low > Trail2
+Blue = Trail1 > Trail2 and close > Trail2 and low < Trail2
+Red = Trail2 > Trail1 and close < Trail2 and high < Trail2
+Yellow = Trail2 > Trail1 and close < Trail2 and high > Trail2
+
+// Signals //
+Bull = barssince(Green) < barssince(Red)
+Bear = barssince(Red) < barssince(Green)
+
+Buy = crossover(Trail1, Trail2)
+Sell = crossunder(Trail1, Trail2)
+SR=(iff(Trail1 > Trail2 ,1, iff(Trail2 > Trail1,-1,0)))
+
+//TS1 = plot(Trail1, "Fast Trail", style=plot.style_line,color=Trail1 > Trail2 ? color.blue : color.yellow, linewidth=2)
+//TS2 = plot(Trail2, "Slow Trail", style=plot.style_line,color=Trail1 > Trail2 ? color.green : color.red, linewidth=2)
+//fill(TS1, TS2, Bull ? color.green : color.red, transp=100)
+
+plotcolor = input(true, "Paint color on chart", input.bool)
+plotbuysell = input(true, "Plot Buy/Sell arrows", input.bool)
+
+bcl = iff(plotcolor == 1, Blue ? color.blue : Green ? color.lime : Yellow ? color.yellow : Red ? color.red : color.white, na)
+barcolor(bcl)
+//plotshape(Buy and plotbuysell == 1, "Buy", shape.arrowup, location.belowbar, color.green, text="Buy")
+//plotshape(Sell and plotbuysell == 1, "Sell", shape.arrowdown, location.abovebar, color.red, text="Sell")
+
+
+//Volume Oscillator
+shortlen = input(5, minval=1)
+longlen = input(10, minval=1)
+short = ema(volume, shortlen)
+long = ema(volume, longlen)
+osc = 100 * (short - long) / long
+hline(0, title="Zero")
+
+uptrend(osc)=>
+    volume_confirmation = false
+    if(osc > 0 and osc > osc[1])
+        volume_confirmation := true
+    else
+        volume_confirmation := false
+        
+    //volume_confirmation
+    
+// Getting inputs
+buy_confirmation = false
+
+fast_length = input(title="Fast Length", type=input.integer, defval=12)
+slow_length = input(title="Slow Length", type=input.integer, defval=26)
+src = input(title="Source", type=input.source, defval=close)
+signal_length = input(title="Signal Smoothing", type=input.integer, minval = 1, maxval = 50, defval = 9)
+sma_source = input(title="Simple MA(Oscillator)", type=input.bool, defval=false)
+sma_signal = input(title="Simple MA(Signal Line)", type=input.bool, defval=false)
+// Plot colors
+col_grow_above = #26A69A
+col_grow_below = #FFCDD2
+col_fall_above = #B2DFDB
+col_fall_below = #EF5350
+col_macd = #0094ff
+col_signal = #ff6a00
+// Calculating
+fast_ma = sma_source ? ema(src, fast_length) : ema(src, fast_length)
+slow_ma = sma_source ? ema(src, slow_length) : ema(src, slow_length)
+macd = fast_ma - slow_ma
+signal = sma_signal ? ema(macd, signal_length) : ema(macd, signal_length)
+hist = macd - signal
+
+
+upswing(hist)=>
+    test = (hist>=0 ? (hist[1] < hist ? col_grow_above : col_fall_above) : (hist[1] < hist ? col_grow_below : col_fall_below))
+    macd_confirmation = false
+    if(hist>=0 and hist[1]<hist)
+        macd_confirmation := true
+    else
+        macd_confirmation := false
+    
+    macd_confirmation
+
+
+plot(hist, title="Histogram", style=plot.style_columns, color=(hist>=0 ? (hist[1] < hist ? col_grow_above : col_fall_above) : (hist[1] < hist ? col_grow_below : col_fall_below)))
+   
+//RSI
+len = input(14, minval=1, title="RSI Length")
+up = rma(max(change(src), 0), len)
+down = rma(-min(change(src), 0), len)
+rsi = down == 0 ? 100 : up == 0 ? 0 : 100 - (100 / (1 + up / down))
+
+//RSIEMA
+lenema = input(9, minval=1, title="RSI EMA Length")
+out = ema(rsi, lenema)
+col=out >= out[1] ? color(color.lime) : color(color.red)
+
+//bgcolour
+b_color = (out < out[1]) ? color(color.red) : (out >= out[1]) ? color(color.green) : na
+    
+rsi_confirm(out)=>
+    rsi_confirmation = false
+    if(out>=out[1])
+        rsi_confirmation := true
+    else
+        rsi_confirmation := false
+    
+    rsi_confirmation
+
+if(rsi_confirm(out) and upswing(hist) and uptrend(osc))
+    buy_confirmation := true   
+    
+plotshape(buy_confirmation, style = shape.triangleup)
+
+
+alertcondition(buy_confirmation, title="Reload Pattern Confirmed")
+
+if(buy_confirmation)
+    strategy.entry("buy", strategy.long, when=strategy.position_size <= 0)
+
+if(Sell)
+    strategy.exit("sell", loss = SL1)
+bgcolor(title="Highlight background", color=b_color)
